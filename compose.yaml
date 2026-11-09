@@ -1,0 +1,46 @@
+name: spark-local
+
+services:
+  spark-master:
+    image: apache/spark:4.0.0
+    container_name: spark-master
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+    ports:
+      - "8080:8080"   # Master UI -> http://localhost:8080
+      - "7077:7077"   # Master RPC (workers + spark-submit connect here)
+    volumes:
+      - ./workspace:/opt/spark/work-dir
+    networks: [spark-net]
+
+  spark-worker:
+    image: apache/spark:4.0.0
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_WORKER_CORES: "2"
+      SPARK_WORKER_MEMORY: "2g"
+    depends_on: [spark-master]
+    deploy:
+      replicas: 3
+    volumes:
+      - ./workspace:/opt/spark/work-dir   # same files visible on every worker
+    networks: [spark-net]
+
+  # JupyterLab = the Spark driver (client mode). Built from the same Spark image.
+  jupyter:
+    build: .
+    image: spark-jupyter:4.0.0
+    container_name: spark-jupyter
+    depends_on: [spark-master]
+    ports:
+      - "8888:8888"   # JupyterLab -> http://localhost:8888
+      - "4040:4040"   # Spark application UI (while a SparkSession is running)
+    volumes:
+      - ./workspace:/opt/spark/work-dir
+    networks: [spark-net]
+
+networks:
+  spark-net:
+    driver: bridge
